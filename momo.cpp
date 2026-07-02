@@ -1,64 +1,8 @@
-/* BUILDING MOMO APP
-------------WHAT IT DOES--------------
-They go to the main menu
-They want to do transactions, but if the user is not registered as an account holder,
-    they have to choose the option to create an account first before they can make any transactions
-Menu:
-At the menu
-
-User enters their contact.
-They create a mobile money accoutn
- - They set the pin for the password
- - They receive a one time password on their device to verify the contact before being able to set the password
- - Account created successfully
-
-They go to the main menu
-1. Transfer Money
-2. MomoPay
-3. Allow Cash Out
-4. My Wallet
-5. Exit
-
--------------Transfer Money-----------------
-Enter receipient contact
-Press 0 to go back
-
-Confirm receipient contact
-Enter Amount
-Enter reference
-You are sending ... to (receipient contact). Total amount is ... (maybe plus fees) Enter MM PIN or 2 to cancel
-
--------------MomoPay and Pay Bill----------------
-  1. Enter merchant id
-  2. back to main menu
-  3. Exit
-
-  - confirm merchant id
-  - enter amount
-  - you are sending ... to ... . Total: ... (maybe plus fees) Enter MM PIN or 2 to cancel
-
--------------Allow Cash Out--------------------
-Are you sure you want to allow cash out?
-  - [Y] / [N]
-Cash out allowed.
-0. Go back
-1. exit
-Send user back to main menu
-
-
--------------My Wallet-------------------
-1. Check Balance
-2. Allow Cash Out
-3. My approvals
-4. Change and reset PIN
-5. Back to main menu
-*/
-
 #include <iostream>
 #include <string>
 #include <cstdlib>
+#include <ctime>
 
-// This returns the user to the main menu
 void returnToMain()
 {
   while (true)
@@ -69,7 +13,7 @@ void returnToMain()
 
     if (choice == 0)
     {
-      std::cout << "Thank you for using GnG. \nExiting...";
+      std::cout << "\nThank you for using GnG. \nExiting...";
       exit(0);
     }
     else if (choice == 1)
@@ -83,11 +27,23 @@ void returnToMain()
   }
 }
 
-// Clears the content of the buffer so that new inputs
 void clearInput()
 {
   std::cin.clear();
   std::cin.ignore(100, '\n');
+}
+
+// checks that contact is exactly 10 digits
+bool isValidContact(std::string contact)
+{
+  if (contact.length() != 10)
+    return false;
+  for (int i = 0; i < 10; i++)
+  {
+    if (contact[i] < '0' || contact[i] > '9')
+      return false;
+  }
+  return true;
 }
 
 class Account
@@ -100,10 +56,28 @@ public:
   double balance{};
   bool isRegistered{false};
   bool cashOutAllowed{false};
+  time_t cashOutTime{}; // stores when cash out was allowed
 
   bool verifyPin(int enteredPin)
   {
     return enteredPin == momoPin;
+  }
+
+  // checks if cash out is still within 2 minutes
+  bool isCashOutActive()
+  {
+    if (!cashOutAllowed)
+      return false;
+
+    time_t now = time(0);
+    double secondsPassed = difftime(now, cashOutTime);
+
+    if (secondsPassed > 120) // 120 seconds = 2 minutes
+    {
+      cashOutAllowed = false; // auto disable
+      return false;
+    }
+    return true;
   }
 };
 
@@ -112,23 +86,31 @@ class CreateAccount
 public:
   Account create(Account acc)
   {
-    std::cout << "============= Create Account ==============\n";
-    std::cout << "Enter your phone number: ";
-    std::cin >> acc.contact;
+    std::cout << "\n============= Create Account ==============\n";
+
+    // keep asking until valid 10-digit contact
+    while (true)
+    {
+      std::cout << "\nEnter your phone number (10 digits): ";
+      std::cin >> acc.contact;
+      if (isValidContact(acc.contact))
+        break;
+      std::cout << "Invalid number. Must be exactly 10 digits. Try again.\n";
+    }
     clearInput();
 
     std::cout << "Enter the name for your account: ";
     std::getline(std::cin, acc.name);
 
     int pin1{}, pin2{};
-    std::cout << "Create a 4-digit GnG PIN: ";
+    std::cout << "\nCreate a 4-digit GnG PIN: ";
     std::cin >> pin1;
     std::cout << "Confirm the GnG PIN: ";
     std::cin >> pin2;
 
     if (pin1 != pin2)
     {
-      std::cout << "PINs do not match. Try again one more time.\n";
+      std::cout << "\nPINs do not match. Try again one more time.\n\n";
       std::cout << "Create a 4-digit GnG PIN: ";
       std::cin >> pin1;
       std::cout << "Confirm the GnG PIN: ";
@@ -136,17 +118,18 @@ public:
 
       if (pin1 != pin2)
       {
-        std::cout << "PINs do not match again. Account creation cancelled. ";
+        std::cout << "PINs do not match again. Account creation cancelled.\n";
         returnToMain();
         return acc;
       }
     }
 
     acc.momoPin = pin1;
-    acc.balance = 0.0;
+    acc.balance = 5000.0;
     acc.isRegistered = true;
 
     std::cout << "\nAccount created successfully! Welcome, " << acc.name << ".\n";
+    std::cout << "You have received a starting bonus of GHS " << acc.balance << ".\n";
     returnToMain();
     return acc;
   }
@@ -157,29 +140,43 @@ class TransferMoney
 private:
   const double fee_rate = 0.01;
 
+  // helper to get a valid 10-digit contact
+  std::string getValidContact(std::string prompt)
+  {
+    std::string contact;
+    while (true)
+    {
+      std::cout << prompt;
+      std::cin >> contact;
+      if (contact == "0")
+        return "0";
+      if (isValidContact(contact))
+        return contact;
+      std::cout << "Invalid number. Must be exactly 10 digits. Try again.\n";
+    }
+  }
+
 public:
   Account transfer(Account acc)
   {
     std::cout << "============= Transfer Money ===============\n";
 
-    std::string recipient;
-    std::cout << "Enter receipient contact (0 to go back): ";
-    std::cin >> recipient;
-
+    std::string recipient = getValidContact("Enter recipient contact (0 to go back): ");
     if (recipient == "0")
       return acc;
 
     std::string rp2;
-    std::cout << "Confirm receipient contact: ";
+    std::cout << "Confirm recipient contact: ";
     std::cin >> rp2;
 
     if (recipient != rp2)
     {
       std::cout << "Contacts do not match. Try again.\n";
-      std::cout << "Enter receipient contact: ";
-      std::cin >> recipient;
+      recipient = getValidContact("Enter recipient contact: ");
+      if (recipient == "0")
+        return acc;
 
-      std::cout << "Confirm receipient contact: ";
+      std::cout << "Confirm recipient contact: ";
       std::cin >> rp2;
 
       if (recipient != rp2)
@@ -212,7 +209,7 @@ public:
               << " to " << recipient
               << ".\nFee: GHS " << fee
               << "\nTotal amount: GHS " << total
-              << "\n\nEnter MM PIN to confirm or 2 to cancel: ";
+              << "\n\nEnter GnG PIN to confirm or 2 to cancel: ";
 
     int input{};
     std::cin >> input;
@@ -272,7 +269,7 @@ public:
         return acc;
       if (choice == 3)
       {
-        std::cout << "Goodbye!\n";
+        std::cout << "Exiting...\n";
         exit(0);
       }
       if (choice != 1)
@@ -361,12 +358,88 @@ public:
     if (choice == 'Y' || choice == 'y')
     {
       acc.cashOutAllowed = true;
-      std::cout << "Cash out allowed.\n";
+      acc.cashOutTime = time(0); // record the time cash out was enabled
+      std::cout << "Cash out allowed. You have 2 minutes to withdraw.\n";
     }
     else
     {
       std::cout << "Cash out not allowed.\n";
     }
+    returnToMain();
+    return acc;
+  }
+};
+
+class WithdrawCash
+{
+public:
+  Account withdraw(Account acc)
+  {
+    std::cout << "\n========== Withdraw Cash ==========\n";
+
+    // check if cash out is active and within 2 minutes
+    if (!acc.isCashOutActive())
+    {
+      std::cout << "Cash out is not enabled or has expired.\n";
+      std::cout << "Go to Allow Cash Out first and you will have 2 minutes to withdraw.\n";
+      returnToMain();
+      return acc;
+    }
+
+    double amount{};
+    std::cout << "Enter amount to withdraw (GHS): ";
+    std::cin >> amount;
+
+    if (amount <= 0)
+    {
+      std::cout << "Invalid amount.\n";
+      returnToMain();
+      return acc;
+    }
+
+    if (acc.balance < amount)
+    {
+      std::cout << "Insufficient balance. Withdrawal failed.\n";
+      returnToMain();
+      return acc;
+    }
+
+    std::cout << "\nYou are about to withdraw GHS " << amount
+              << ".\nEnter GnG PIN to confirm or 2 to cancel: ";
+
+    int input{};
+    std::cin >> input;
+    if (input == 2)
+    {
+      std::cout << "Withdrawal cancelled.\n";
+      returnToMain();
+      return acc;
+    }
+
+    if (!acc.verifyPin(input))
+    {
+      std::cout << "\nIncorrect PIN. One more attempt or enter 2 to cancel: ";
+      std::cin >> input;
+      if (input == 2 || !acc.verifyPin(input))
+      {
+        std::cout << "\nWithdrawal cancelled.\n";
+        returnToMain();
+        return acc;
+      }
+    }
+
+    // check again in case 2 minutes passed while user was entering PIN
+    if (!acc.isCashOutActive())
+    {
+      std::cout << "\nCash out window expired. Withdrawal cancelled.\n";
+      returnToMain();
+      return acc;
+    }
+
+    acc.balance -= amount;
+    acc.cashOutAllowed = false; // disable cash out after successful withdrawal
+    std::cout << "\nWithdrawal of GHS " << amount << " successful!\n";
+    std::cout << "New balance: GHS " << acc.balance << "\n";
     returnToMain();
     return acc;
   }
@@ -475,6 +548,7 @@ private:
   TransferMoney transferService{};
   MomoPay momoPayService{};
   AllowCashOut cashOutService{};
+  WithdrawCash withdrawService{};
   MyWallet walletService{};
 
 public:
@@ -482,14 +556,15 @@ public:
   {
     while (true)
     {
-      std::cout << "\n\n-------------- Welcome to SendeMaMe --------------\n"
+      std::cout << "\n\n-------------- Welcome to GnG --------------\n"
                 << "Logged in as: " << acc.name << "\n"
                 << "Choose from the following options:\n"
                 << "1. Transfer Money\n"
                 << "2. MomoPay\n"
                 << "3. Allow Cash Out\n"
-                << "4. My Wallet\n"
-                << "5. Exit\n"
+                << "4. Withdraw Cash\n"
+                << "5. My Wallet\n"
+                << "6. Exit\n"
                 << "Choice: ";
 
       std::cin >> optionNum;
@@ -506,13 +581,16 @@ public:
         acc = cashOutService.allow(acc);
         break;
       case 4:
-        acc = walletService.open(acc);
+        acc = withdrawService.withdraw(acc);
         break;
       case 5:
-        std::cout << "Thank you for using SendeMaMe. Goodbye!\n";
+        acc = walletService.open(acc);
+        break;
+      case 6:
+        std::cout << "\nThank you for using GnG. Exiting...\n";
         exit(0);
       default:
-        std::cout << "Invalid option. Please try again.\n";
+        std::cout << "\nInvalid option. Please try again.\n";
         break;
       }
     }
@@ -525,24 +603,34 @@ int main()
   CreateAccount createAcc{};
   MainMenu mainMenu{};
 
-  std::cout << "=========== SendeMaMe Mobile Money ==============";
+  std::cout << "=========== GnG Mobile Money ==============\n";
 
   while (!acc.isRegistered)
   {
     std::cout << "\nYou need an account to continue.\n"
-              << "1. Create Account.\n"
-              << "2. Exit \n"
+              << "1. Create Account\n"
+              << "2. Exit\n"
               << "Choice: ";
 
     int choice{};
+    std::cin >> choice;
+
     if (choice == 2)
     {
-      std::cout << "Exiting...";
+      std::cout << "\nExiting...";
       return 0;
     }
     else if (choice == 1)
     {
       acc = createAcc.create(acc);
     }
+    else
+    {
+      std::cout << "\nInvalid Option. Try again.";
+    }
   }
+
+  mainMenu.menu(acc);
+
+  return 0;
 }
